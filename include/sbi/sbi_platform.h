@@ -137,11 +137,14 @@ struct sbi_platform_operations {
 				   struct sbi_ecall_return *out);
 
 	/** platform specific handler to fixup load fault */
-	int (*emulate_load)(int rlen, unsigned long addr,
-			    union sbi_ldst_data *out_val);
+	int (*emulate_load)(ulong insn, int rlen, ulong addr,
+			    union sbi_ldst_data *out_val,
+			    struct sbi_trap_context *tcntx);
+
 	/** platform specific handler to fixup store fault */
-	int (*emulate_store)(int wlen, unsigned long addr,
-			     union sbi_ldst_data in_val);
+	int (*emulate_store)(ulong insn, int wlen, ulong addr,
+			     union sbi_ldst_data in_val,
+			     struct sbi_trap_context *tcntx);
 
 	/** platform specific pmp setup on current HART */
 	void (*pmp_set)(unsigned int n, unsigned long flags,
@@ -623,12 +626,13 @@ static inline int sbi_platform_vendor_ext_provider(
  * @return 0 on success and negative error code on failure
  */
 static inline int sbi_platform_emulate_load(const struct sbi_platform *plat,
-					    int rlen, unsigned long addr,
-					    union sbi_ldst_data *out_val)
+					    ulong insn, int rlen, ulong addr,
+					    union sbi_ldst_data *out_val,
+					    struct sbi_trap_context *tcntx)
 {
 	if (plat && sbi_platform_ops(plat)->emulate_load) {
-		return sbi_platform_ops(plat)->emulate_load(rlen, addr,
-							    out_val);
+		return sbi_platform_ops(plat)->emulate_load(insn, rlen, addr,
+							    out_val, tcntx);
 	}
 	return SBI_ENOTSUPP;
 }
@@ -645,12 +649,13 @@ static inline int sbi_platform_emulate_load(const struct sbi_platform *plat,
  * @return 0 on success and negative error code on failure
  */
 static inline int sbi_platform_emulate_store(const struct sbi_platform *plat,
-					     int wlen, unsigned long addr,
-					     union sbi_ldst_data in_val)
+					     ulong insn, int wlen, ulong addr,
+					     union sbi_ldst_data in_val,
+					     struct sbi_trap_context *tcntx)
 {
 	if (plat && sbi_platform_ops(plat)->emulate_store) {
-		return sbi_platform_ops(plat)->emulate_store(wlen, addr,
-							     in_val);
+		return sbi_platform_ops(plat)->emulate_store(insn, wlen, addr,
+							     in_val, tcntx);
 	}
 	return SBI_ENOTSUPP;
 }

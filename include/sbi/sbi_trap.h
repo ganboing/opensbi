@@ -218,6 +218,8 @@ _Static_assert(
 #define GET_RS2S(insn, regs)		REG_VAL(GET_RS2S_NUM(insn), regs)
 #define GET_RS2C(insn, regs)		REG_VAL(GET_RS2C_NUM(insn), regs)
 #define SET_RD(insn, regs, val)		(REG_VAL(GET_RD_NUM(insn), regs) = (val))
+#define SET_RD1S(insn, regs, val)	(REG_VAL(GET_RS1S_NUM(insn), regs) = (val))
+#define SET_RD2S(insn, regs, val)	(REG_VAL(GET_RS2S_NUM(insn), regs) = (val))
 
 /** Representation of trap details */
 struct sbi_trap_info {
@@ -272,6 +274,65 @@ static inline int sbi_mstatus_prev_mode(unsigned long mstatus)
 {
 	return (mstatus & MSTATUS_MPP) >> MSTATUS_MPP_SHIFT;
 }
+
+static inline int sbi_sstatus_prev_mode(unsigned long sstatus)
+{
+	return (sstatus & SSTATUS_SPP) >> SSTATUS_SPP_SHIFT;
+}
+
+#if __riscv_xlen == 32
+static inline int sbi_regs_prev_xlen(const struct sbi_trap_regs *regs)
+{
+	return 32;
+}
+#else
+static inline int sbi_mstatus_sxl(unsigned long mstatus)
+{
+	return (mstatus & MSTATUS_SXL) >> MSTATUS_SXL_SHIFT;
+}
+
+static inline int sbi_mstatus_uxl(unsigned long mstatus)
+{
+	return (mstatus & MSTATUS_UXL) >> MSTATUS_UXL_SHIFT;
+}
+
+static inline int sbi_hstatus_vsxl(unsigned long hstatus)
+{
+	return (hstatus & HSTATUS_VSXL) >> HSTATUS_VSXL_SHIFT;
+}
+
+static inline int sbi_regs_prev_xlen(const struct sbi_trap_regs *regs)
+{
+	unsigned long hstatus, vsstatus;
+
+	if (!sbi_regs_from_virt(regs)) {
+		switch (sbi_mstatus_prev_mode(regs->mstatus)) {
+		case PRV_M:
+			return 64;
+		case PRV_S:
+			return sbi_mstatus_sxl(regs->mstatus) << 5;
+		case PRV_U:
+			return sbi_mstatus_uxl(regs->mstatus) << 5;
+		default:
+			__builtin_unreachable();
+		}
+	}
+
+	/* V=1 */
+	hstatus = csr_read(CSR_HSTATUS);
+	if (sbi_hstatus_vsxl(hstatus) < 2)
+		return 32;
+
+	vsstatus = csr_read(CSR_VSSTATUS);
+	switch (sbi_sstatus_prev_mode(vsstatus)) {
+		case PRV_S:
+			return 64;
+		case PRV_U:
+			return sbi_mstatus_uxl(vsstatus) << 5;
+	}
+	__builtin_unreachable();
+}
+#endif
 
 int sbi_trap_redirect(struct sbi_trap_regs *regs,
 		      const struct sbi_trap_info *trap);
