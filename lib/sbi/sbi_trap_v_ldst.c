@@ -137,13 +137,11 @@ static inline void vsetvl(ulong vl, ulong vtype)
 			:: "r" (vl), "r" (vtype));
 }
 
-int sbi_misaligned_v_ld_emulator(int rlen, union sbi_ldst_data *out_val,
-				 struct sbi_trap_context *tcntx)
+int sbi_misaligned_v_ld_emulator(ulong insn, struct sbi_trap_context *tcntx)
 {
 	const struct sbi_trap_info *orig_trap = &tcntx->trap;
 	struct sbi_trap_regs *regs = &tcntx->regs;
 	struct sbi_trap_info uptrap;
-	ulong insn = sbi_get_insn(regs->mepc, &uptrap);
 	ulong vl = csr_read(CSR_VL);
 	ulong vtype = csr_read(CSR_VTYPE);
 	ulong vlenb = csr_read(CSR_VLENB);
@@ -237,13 +235,11 @@ int sbi_misaligned_v_ld_emulator(int rlen, union sbi_ldst_data *out_val,
 	return vl;
 }
 
-int sbi_misaligned_v_st_emulator(int wlen, union sbi_ldst_data in_val,
-				 struct sbi_trap_context *tcntx)
+int sbi_misaligned_v_st_emulator(ulong insn, struct sbi_trap_context *tcntx)
 {
 	const struct sbi_trap_info *orig_trap = &tcntx->trap;
 	struct sbi_trap_regs *regs = &tcntx->regs;
 	struct sbi_trap_info uptrap;
-	ulong insn = sbi_get_insn(regs->mepc, &uptrap);
 	ulong vl = csr_read(CSR_VL);
 	ulong vtype = csr_read(CSR_VTYPE);
 	ulong vlenb = csr_read(CSR_VLENB);
@@ -331,14 +327,19 @@ int sbi_misaligned_v_st_emulator(int wlen, union sbi_ldst_data in_val,
 	return vl;
 }
 #else
-int sbi_misaligned_v_ld_emulator(int rlen, union sbi_ldst_data *out_val,
-				 struct sbi_trap_context *tcntx)
+int sbi_misaligned_v_ld_emulator(ulong insn, struct sbi_trap_context *tcntx)
 {
-	return 0;
+	const struct sbi_trap_info *orig_trap = &tcntx->trap;
+	struct sbi_trap_regs *regs = &tcntx->regs;
+
+	return sbi_trap_redirect(regs, orig_trap);
 }
-int sbi_misaligned_v_st_emulator(int wlen, union sbi_ldst_data in_val,
-				 struct sbi_trap_context *tcntx)
+
+int sbi_misaligned_v_st_emulator(ulong insn, struct sbi_trap_context *tcntx)
 {
-	return 0;
+	const struct sbi_trap_info *orig_trap = &tcntx->trap;
+	struct sbi_trap_regs *regs = &tcntx->regs;
+
+	return sbi_trap_redirect(regs, orig_trap);
 }
 #endif /* OPENSBI_CC_SUPPORT_VECTOR */
