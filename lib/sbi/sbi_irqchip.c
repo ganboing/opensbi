@@ -10,6 +10,8 @@
 #include <sbi/sbi_irqchip.h>
 #include <sbi/sbi_list.h>
 #include <sbi/sbi_platform.h>
+#include <sbi/sbi_vs_passthrough.h>
+#include <sbi/sbi_console.h>
 
 static SBI_LIST_HEAD(irqchip_list);
 
@@ -22,6 +24,9 @@ static int (*ext_irqfn)(void) = default_irqfn;
 
 int sbi_irqchip_process(void)
 {
+	if (sbi_vs_passth_active())
+		sbi_panic("%s: NOT IMPLEMENTED\n", __func__);
+
 	return ext_irqfn();
 }
 

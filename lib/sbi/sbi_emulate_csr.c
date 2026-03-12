@@ -16,6 +16,8 @@
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_timer.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_vs_passthrough.h>
+#include <sbi/sbi_console.h>
 
 static bool hpm_allowed(int hpm_num, ulong prev_mode, bool virt)
 {
@@ -41,18 +43,36 @@ static bool hpm_allowed(int hpm_num, ulong prev_mode, bool virt)
 	return ((cen >> hpm_num) & 1) ? true : false;
 }
 
-int sbi_emulate_csr_read(int csr_num, struct sbi_trap_regs *regs,
+int sbi_emulate_csr_read(int csr_num, struct sbi_trap_context *tcntx,
 			 ulong *csr_val)
 {
 	int ret = 0;
 	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
-	ulong prev_mode = sbi_mstatus_prev_mode(regs->mstatus);
-	bool virt = sbi_regs_from_virt(regs);
+	ulong prev_mode = sbi_mstatus_prev_mode(tcntx->regs.mstatus);
+	bool virt = sbi_regs_from_virt(&tcntx->regs);
+
+	if (sbi_vs_passth_active()) {
+		ret = sbi_vs_passth_csr_read(csr_num, tcntx, csr_val);
+		if (ret != SBI_ENOTSUPP)
+			return ret;
+		ret = 0;
+	}
 
 	switch (csr_num) {
 	case CSR_HTIMEDELTA:
 		if (prev_mode == PRV_S && !virt)
 			*csr_val = sbi_timer_get_delta();
+		else
+			ret = SBI_ENOTSUPP;
+		break;
+	case CSR_HENVCFG:
+#if __riscv_xlen == 32
+	case CSR_HENVCFGH:
+#endif
+	case CSR_SENVCFG:
+		if (!virt && prev_mode == PRV_S && misa_extension('H') &&
+		    sbi_hart_priv_version(scratch) == SBI_HART_PRIV_VER_1_11)
+			*csr_val = 0;
 		else
 			ret = SBI_ENOTSUPP;
 		break;
@@ -68,7 +88,8 @@ int sbi_emulate_csr_read(int csr_num, struct sbi_trap_regs *regs,
 		 * We emulate TIME CSR for both Host (HS/U-mode) and
 		 * Guest (VS/VU-mode).
 		 */
-		*csr_val = (virt) ? sbi_timer_virt_value():
+		*csr_val = (virt && !sbi_vs_passth_active()) ?
+				    sbi_timer_virt_value():
 				    sbi_timer_value();
 		break;
 	case CSR_INSTRET:
@@ -141,6 +162,10 @@ int sbi_emulate_csr_read(int csr_num, struct sbi_trap_regs *regs,
 #undef switchcase_hpm
 
 	default:
+		if (sbi_vs_passth_active())
+			sbi_panic(
+				"%s: vs_passth active, but can't handle CSR %u\n",
+				__func__, csr_num);
 		ret = SBI_ENOTSUPP;
 		break;
 	}
@@ -148,18 +173,35 @@ int sbi_emulate_csr_read(int csr_num, struct sbi_trap_regs *regs,
 	return ret;
 }
 
-int sbi_emulate_csr_write(int csr_num, struct sbi_trap_regs *regs,
+int sbi_emulate_csr_write(int csr_num, struct sbi_trap_context *tcntx,
 			  ulong csr_val)
 {
 	int ret = 0;
-	ulong prev_mode = sbi_mstatus_prev_mode(regs->mstatus);
-	bool virt = sbi_regs_from_virt(regs);
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+	ulong prev_mode = sbi_mstatus_prev_mode(tcntx->regs.mstatus);
+	bool virt = sbi_regs_from_virt(&tcntx->regs);
+
+	if (sbi_vs_passth_active()) {
+		ret = sbi_vs_passth_csr_write(csr_num, tcntx, csr_val);
+		if (ret != SBI_ENOTSUPP)
+			return ret;
+		ret = 0;
+	}
 
 	switch (csr_num) {
 	case CSR_HTIMEDELTA:
 		if (prev_mode == PRV_S && !virt)
 			sbi_timer_set_delta(csr_val);
 		else
+			ret = SBI_ENOTSUPP;
+		break;
+	case CSR_HENVCFG:
+#if __riscv_xlen == 32
+	case CSR_HENVCFGH:
+#endif
+	case CSR_SENVCFG:
+		if (!virt && prev_mode == PRV_S && misa_extension('H') &&
+		    sbi_hart_priv_version(scratch) == SBI_HART_PRIV_VER_1_11)
 			ret = SBI_ENOTSUPP;
 		break;
 #if __riscv_xlen == 32
@@ -171,6 +213,10 @@ int sbi_emulate_csr_write(int csr_num, struct sbi_trap_regs *regs,
 		break;
 #endif
 	default:
+		if (sbi_vs_passth_active())
+			sbi_panic(
+				"%s: vs_passth active, but can't handle CSR %u\n",
+				__func__, csr_num);
 		ret = SBI_ENOTSUPP;
 		break;
 	}

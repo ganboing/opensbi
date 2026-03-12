@@ -8,10 +8,10 @@
 #ifndef __SBI_ILLEGAL_ATOMIC_H__
 #define __SBI_ILLEGAL_ATOMIC_H__
 
-#include <sbi/sbi_types.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_trap_regs;
 
-int sbi_illegal_atomic(ulong insn, struct sbi_trap_regs *regs);
+int sbi_illegal_atomic(ulong insn, struct sbi_trap_context *tcntx);
 
 #endif

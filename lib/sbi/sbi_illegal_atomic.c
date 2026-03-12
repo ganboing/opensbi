@@ -17,9 +17,9 @@
 
 #if defined(__riscv_atomic) || defined(__riscv_zaamo)
 
-int sbi_illegal_atomic(ulong insn, struct sbi_trap_regs *regs)
+int sbi_illegal_atomic(ulong insn, struct sbi_trap_context *tcntx)
 {
-	return truly_illegal_insn(insn, regs);
+	return truly_illegal_insn(insn, tcntx);
 }
 
 #elif defined(__riscv_zalrsc)

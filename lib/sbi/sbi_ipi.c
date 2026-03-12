@@ -24,6 +24,8 @@
 #include <sbi/sbi_pmu.h>
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_tlb.h>
+#include <sbi/sbi_vs_passthrough.h>
+#include <sbi/sbi_console.h>
 
 struct sbi_ipi_data {
 	unsigned long ipi_type;
@@ -199,7 +201,10 @@ void sbi_ipi_event_destroy(u32 event)
 
 static void sbi_ipi_process_smode(struct sbi_scratch *scratch)
 {
-	csr_set(CSR_MIP, MIP_SSIP);
+	if (sbi_vs_passth_active())
+		csr_set(CSR_HVIP, MIP_VSSIP);
+	else
+		csr_set(CSR_MIP, MIP_SSIP);
 }
 
 static struct sbi_ipi_event_ops ipi_smode_ops = {
@@ -216,7 +221,10 @@ int sbi_ipi_send_smode(ulong hmask, ulong hbase)
 
 void sbi_ipi_clear_smode(void)
 {
-	csr_clear(CSR_MIP, MIP_SSIP);
+	if (sbi_vs_passth_active())
+		csr_clear(CSR_HVIP, MIP_VSSIP);
+	else
+		csr_clear(CSR_MIP, MIP_SSIP);
 }
 
 static int sbi_ipi_update_halt(struct sbi_scratch *scratch,

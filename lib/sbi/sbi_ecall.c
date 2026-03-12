@@ -13,6 +13,7 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_vs_passthrough.h>
 
 extern struct sbi_ecall_extension *const sbi_ecall_exts[];
 
@@ -127,6 +128,11 @@ int sbi_ecall_handler(struct sbi_trap_context *tcntx)
 	struct sbi_ecall_return out = {0};
 	bool is_0_1_spec = 0;
 
+	if (sbi_vs_passth_active() &&
+	   !sbi_vs_passth_filter_ecall(tcntx)) {
+		goto nosupport;
+	}
+
 	ext = sbi_ecall_find_extension(extension_id);
 	if (ext && ext->handle) {
 		ret = ext->handle(extension_id, func_id, regs, &out);
@@ -134,6 +140,7 @@ int sbi_ecall_handler(struct sbi_trap_context *tcntx)
 		    extension_id <= SBI_EXT_0_1_SHUTDOWN)
 			is_0_1_spec = 1;
 	} else {
+nosupport:
 		ret = SBI_ENOTSUPP;
 	}
 

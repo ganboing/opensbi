@@ -21,6 +21,7 @@
 #include <sbi/sbi_pmu.h>
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_vs_passthrough.h>
 
 extern void __sbi_expected_trap(void);
 extern void __sbi_expected_trap_hext(void);
@@ -212,14 +213,15 @@ static int fp_init(struct sbi_scratch *scratch)
 static int delegate_traps(struct sbi_scratch *scratch)
 {
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
-	unsigned long interrupts, exceptions;
+	unsigned long interrupts = 0, exceptions;
 
 	if (!misa_extension('S'))
 		/* No delegation possible as mideleg does not exist */
 		return 0;
 
 	/* Send M-mode interrupts and most exceptions to S-mode */
-	interrupts = MIP_SSIP | MIP_STIP | MIP_SEIP;
+	if (!sbi_vs_passth_active())
+		interrupts = MIP_SSIP | MIP_STIP | MIP_SEIP;
 	interrupts |= sbi_pmu_irq_mask();
 
 	exceptions = (1U << CAUSE_MISALIGNED_FETCH) | (1U << CAUSE_BREAKPOINT) |
@@ -237,7 +239,7 @@ static int delegate_traps(struct sbi_scratch *scratch)
 	 * The HS-mode will additionally handle supervisor calls (i.e. ecalls
 	 * from VS-mode), Guest page faults and Virtual interrupts.
 	 */
-	if (misa_extension('H')) {
+	if (misa_extension('H') && !sbi_vs_passth_active()) {
 		exceptions |= (1U << CAUSE_VIRTUAL_SUPERVISOR_ECALL);
 		exceptions |= (1U << CAUSE_FETCH_GUEST_PAGE_FAULT);
 		exceptions |= (1U << CAUSE_LOAD_GUEST_PAGE_FAULT);
@@ -776,6 +778,8 @@ sbi_hart_switch_mode(unsigned long arg0, unsigned long arg1,
 	unsigned long val;
 #endif
 
+	next_virt = next_virt ? true : sbi_vs_passth_active();
+
 	switch (next_mode) {
 	case PRV_M:
 		break;
@@ -826,6 +830,9 @@ sbi_hart_switch_mode(unsigned long arg0, unsigned long arg1,
 			csr_write(CSR_UIE, 0);
 		}
 	}
+
+	if (sbi_vs_passth_active())
+		sbi_vs_passth_before_handoff();
 
 	register unsigned long a0 asm("a0") = arg0;
 	register unsigned long a1 asm("a1") = arg1;

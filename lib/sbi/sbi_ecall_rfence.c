@@ -14,6 +14,7 @@
 #include <sbi/sbi_ecall_interface.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_tlb.h>
+#include <sbi/sbi_vs_passthrough.h>
 
 static int sbi_ecall_rfence_handler(unsigned long extid, unsigned long funcid,
 				    struct sbi_trap_regs *regs,
@@ -28,6 +29,17 @@ static int sbi_ecall_rfence_handler(unsigned long extid, unsigned long funcid,
 	    funcid <= SBI_EXT_RFENCE_REMOTE_HFENCE_VVMA)
 		if (!misa_extension('H'))
 			return SBI_ENOTSUPP;
+
+	if (sbi_vs_passth_active()) {
+		switch (funcid) {
+		case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA:
+			funcid = SBI_EXT_RFENCE_REMOTE_HFENCE_VVMA;
+			break;
+		case SBI_EXT_RFENCE_REMOTE_SFENCE_VMA_ASID:
+			funcid = SBI_EXT_RFENCE_REMOTE_HFENCE_VVMA_ASID;
+			break;
+		}
+	}
 
 	switch (funcid) {
 	case SBI_EXT_RFENCE_REMOTE_FENCE_I:

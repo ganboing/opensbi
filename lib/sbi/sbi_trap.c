@@ -24,6 +24,7 @@
 #include <sbi/sbi_sse.h>
 #include <sbi/sbi_timer.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_vs_passthrough.h>
 
 static void sbi_trap_error_one(const struct sbi_trap_context *tcntx,
 			       const char *prefix, u32 hartid, u32 depth)
@@ -146,6 +147,10 @@ int sbi_trap_redirect(struct sbi_trap_regs *regs,
 
 	/* Update hypervisor CSRs if going to HS-mode */
 	if (misa_extension('H') && !next_virt) {
+		if (sbi_vs_passth_active())
+			sbi_panic(
+				"%s: vs_passth active, must not return to HS mode\n",
+				__func__);
 		hstatus = csr_read(CSR_HSTATUS);
 		if (prev_virt) {
 			/* hstatus.SPVP is only updated if coming from VS/VU-mode */
@@ -242,6 +247,12 @@ static int sbi_trap_nonaia_irq(unsigned long irq)
 		break;
 	case IRQ_M_EXT:
 		return sbi_irqchip_process();
+	case IRQ_S_EXT:
+		if (sbi_vs_passth_active()) {
+			sbi_vs_passth_sext_irq();
+			break;
+		}
+		__attribute__((__fallthrough__));
 	default:
 		if (irq == sbi_pmu_irq_bit()) {
 			sbi_pmu_ovf_irq();
@@ -325,6 +336,7 @@ struct sbi_trap_context *sbi_trap_handler(struct sbi_trap_context *tcntx)
 	}
 
 	switch (mcause) {
+	case CAUSE_VIRTUAL_INST_FAULT:
 	case CAUSE_ILLEGAL_INSTRUCTION:
 		rc  = sbi_illegal_insn_handler(tcntx);
 		msg = "illegal instruction handler failed";
@@ -339,6 +351,10 @@ struct sbi_trap_context *sbi_trap_handler(struct sbi_trap_context *tcntx)
 		rc  = sbi_misaligned_store_handler(tcntx);
 		msg = "misaligned store handler failed";
 		break;
+	case CAUSE_VIRTUAL_SUPERVISOR_ECALL:
+		if (!sbi_vs_passth_active())
+			goto redirect;
+		__attribute__((__fallthrough__));
 	case CAUSE_SUPERVISOR_ECALL:
 	case CAUSE_MACHINE_ECALL:
 		rc  = sbi_ecall_handler(tcntx);
@@ -358,7 +374,12 @@ struct sbi_trap_context *sbi_trap_handler(struct sbi_trap_context *tcntx)
 		rc  = sbi_double_trap_handler(tcntx);
 		msg = "double trap handler failed";
 		break;
+	case CAUSE_FETCH_GUEST_PAGE_FAULT:
+	case CAUSE_LOAD_GUEST_PAGE_FAULT:
+	case CAUSE_STORE_GUEST_PAGE_FAULT:
+		sbi_panic("%s: NOT IMPLEMENTED\n", __func__);
 	default:
+redirect:
 		/* If the trap came from S or U mode, redirect it there */
 		msg = "trap redirect failed";
 		rc  = sbi_trap_redirect(regs, trap);

@@ -10,14 +10,14 @@
 #ifndef __SBI_EMULATE_CSR_H__
 #define __SBI_EMULATE_CSR_H__
 
-#include <sbi/sbi_types.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_trap_regs;
 
-int sbi_emulate_csr_read(int csr_num, struct sbi_trap_regs *regs,
+int sbi_emulate_csr_read(int csr_num, struct sbi_trap_context *tcntx,
 			 ulong *csr_val);
 
-int sbi_emulate_csr_write(int csr_num, struct sbi_trap_regs *regs,
+int sbi_emulate_csr_write(int csr_num, struct sbi_trap_context *tcntx,
 			  ulong csr_val);
 
 #endif

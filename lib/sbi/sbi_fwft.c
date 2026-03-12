@@ -18,6 +18,7 @@
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_tlb.h>
 #include <sbi/sbi_types.h>
+#include <sbi/sbi_vs_passthrough.h>
 
 #include <sbi/riscv_asm.h>
 #include <sbi/riscv_encoding.h>
@@ -121,11 +122,15 @@ static int fwft_misaligned_delegation_supported(struct fwft_config *conf)
 static int fwft_set_misaligned_delegation(struct fwft_config *conf,
 					 unsigned long value)
 {
-	if (value == 1)
+	if (value == 1) {
+		if (sbi_vs_passth_active())
+			csr_set(CSR_HEDELEG, MIS_DELEG);
 		csr_set(CSR_MEDELEG, MIS_DELEG);
-	else if (value == 0)
+	} else if (value == 0) {
 		csr_clear(CSR_MEDELEG, MIS_DELEG);
-	else
+		if (sbi_vs_passth_active())
+			csr_clear(CSR_HEDELEG, MIS_DELEG);
+	} else
 		return SBI_EINVAL;
 
 	return SBI_OK;

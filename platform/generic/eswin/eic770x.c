@@ -14,9 +14,19 @@
 #include <sbi/sbi_ipi.h>
 #include <sbi/sbi_hart_pmp.h>
 #include <sbi/sbi_hart_protection.h>
+#include <sbi/sbi_vs_passthrough.h>
+#include <sbi/sbi_physmem_alias.h>
 #include <sbi_utils/hsm/fdt_hsm_sifive_inst.h>
 #include <eswin/eic770x.h>
 #include <eswin/hfp.h>
+
+static const struct sbi_mem_alias eic7700_mem_aliases[] = {
+	// Die 0 DRAM
+	{ 0x80000000UL, 0xc000000000UL, 0x400000000UL },
+	{ }
+};
+
+riscv_gs_pgtable eic7700_gs_pgtable __aligned(sizeof(riscv_gs_pgtable));
 
 static struct sbi_hart_protection eswin_eic7700_pmp_protection;
 static volatile bool eic770x_power_down = false;
@@ -222,11 +232,26 @@ static struct sbi_system_reset_device eic7700_reset = {
 
 static int eswin_eic7700_early_init(bool cold_boot)
 {
-	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+	ulong hgatp;
 	int rc;
 
 	if (!cold_boot)
 		return generic_early_init(cold_boot);
+
+	hgatp = sbi_memalias_gatp_init(eic7700_mem_aliases,
+			&eic7700_gs_pgtable, PT_SV39x4);
+
+	rc = sbi_vs_passth_enable(hgatp);
+	if (rc)
+		return rc;
+
+	add_root_mem_chk((ulong)&eic7700_gs_pgtable,
+			 sizeof(eic7700_gs_pgtable),
+			 sizeof(eic7700_gs_pgtable),
+			(SBI_DOMAIN_MEMREGION_M_READABLE |
+			 SBI_DOMAIN_MEMREGION_M_WRITABLE |
+			 SBI_DOMAIN_MEMREGION_SU_READABLE |
+			 SBI_DOMAIN_MEMREGION_FW));
 
 	if (board_reset)
 		sbi_system_reset_add_device(board_reset);
@@ -237,7 +262,7 @@ static int eswin_eic7700_early_init(bool cold_boot)
 	writel(1, (void*)EIC770X_TL256D2D_OUT);
 	writel(1, (void*)EIC770X_TL256D2D_IN);
 	asm volatile ("fence o, rw");
-
+#if 0
 	/* Block firmware in uncached memory */
 	add_root_mem_chk(EIC770X_TO_UNCACHED(
 			 scratch->fw_start),
@@ -248,7 +273,7 @@ static int eswin_eic7700_early_init(bool cold_boot)
 			 SBI_DOMAIN_MEMREGION_M_EXECUTABLE |
 			 SBI_DOMAIN_MEMREGION_MMIO |
 			 SBI_DOMAIN_MEMREGION_FW));
-
+#endif
 	/* Allow SURW of P550 + System Port */
 	add_root_mem_chk(0,
 			 EIC770X_MEMPORT_BASE,
@@ -467,6 +492,18 @@ static bool eswin_eic7700_single_fw_region(void)
 	return true;
 }
 
+int eswin_sbi_vendor_ext_provider(long funcid,
+				  struct sbi_trap_regs *regs,
+				  struct sbi_ecall_return *out)
+{
+	switch (funcid) {
+	case 0x50425543: // PBUC
+		out->value = 38;
+		return 0;
+	}
+	return SBI_ENOTSUPP;
+}
+
 static int eswin_eic7700_platform_init(const void *fdt, int nodeoff,
 					const struct fdt_match *match)
 {
@@ -475,6 +512,7 @@ static int eswin_eic7700_platform_init(const void *fdt, int nodeoff,
 	generic_platform_ops.early_init = eswin_eic7700_early_init;
 	generic_platform_ops.final_init = eswin_eic7700_final_init;
 	generic_platform_ops.single_fw_region = eswin_eic7700_single_fw_region;
+	generic_platform_ops.vendor_ext_provider = eswin_sbi_vendor_ext_provider;
 
 	if (board_override)
 		board_reset = board_override->reset_dev;
