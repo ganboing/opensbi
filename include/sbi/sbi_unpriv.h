@@ -15,6 +15,16 @@
 struct sbi_scratch;
 struct sbi_trap_info;
 
+union sbi_unpriv_data {
+	u8 b;
+	u16 h;
+	u32 w;
+#if __riscv_xlen == 64
+	u64 d;
+#endif
+	u8 bytes[__riscv_xlen / 8];
+};
+
 #define DECLARE_UNPRIVILEGED_LOAD_FUNCTION(type)           \
 	type sbi_load_##type(const type *addr,             \
 			     struct sbi_trap_info *trap);
@@ -35,6 +45,12 @@ DECLARE_UNPRIVILEGED_LOAD_FUNCTION(u32)
 DECLARE_UNPRIVILEGED_LOAD_FUNCTION(u64)
 DECLARE_UNPRIVILEGED_STORE_FUNCTION(u64)
 DECLARE_UNPRIVILEGED_LOAD_FUNCTION(ulong)
+
+void sbi_load_loop(u8 *buffer, ulong addr, ulong len,
+		   struct sbi_trap_info *trap);
+
+void sbi_store_loop(u8 *buffer, ulong addr, ulong len,
+		    struct sbi_trap_info *trap);
 
 ulong sbi_get_insn(ulong mepc, struct sbi_trap_info *trap);
 
